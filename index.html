@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rubik's Cube Pattern Timer</title>
+  <style>
+    :root {
+      /* Base colors - white theme for all modes */
+      --bg: #ffffff;
+      --fg: #2d3748;
+      --muted: #4a5568;
+      --accent: #4299e1;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --card: #f7fafc;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--fg); display: grid; place-items: center; padding: 24px;
+      transition: background 0.5s ease, color 0.5s ease;
+    }
+    .app { width: min(1200px, 96vw); display: grid; gap: 16px; }
+
+    .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .badge { font-size: 12px; color: var(--muted); }
+    
+    .mode-selector {
+      display: flex; gap: 8px; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 12px;
+    }
+    .mode-btn {
+      padding: 8px 16px; border-radius: 8px; background: transparent; color: var(--muted);
+      border: none; cursor: pointer; transition: all 0.2s; font-weight: 500;
+    }
+    .mode-btn.active {
+      background: var(--accent); color: var(--bg); font-weight: 600;
+    }
+
+    .scramble {
+      width: 100%; background: var(--card); border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px 18px;
+      font-size: clamp(16px, 1.6vw, 20px); letter-spacing: 0.4px; line-height: 1.5; color: var(--fg);
+      transition: background 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+    }
+
+    .pattern-section {
+      display: none; background: var(--card); border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px;
+      transition: background 0.5s ease, border-color 0.5s ease;
+    }
+    .pattern-section.active { display: block; }
+    .pattern-header { 
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; 
+    }
+    .pattern-title { font-weight: 600; color: var(--accent); transition: color 0.5s ease; }
+    .pattern-info { font-size: 12px; color: var(--muted); transition: color 0.5s ease; }
+
+    .cube-net {
+      display: grid;
+      grid-template-areas: 
+        ". top . ."
+        "left front right back"
+        ". bottom . .";
+      gap: 2px; justify-content: center; margin: 16px 0;
+    }
+    .face {
+      width: 60px; height: 60px; display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; border: 2px solid #4a5568; border-radius: 4px;
+    }
+    .face.top { grid-area: top; }
+    .face.left { grid-area: left; }
+    .face.front { grid-area: front; }
+    .face.right { grid-area: right; }
+    .face.back { grid-area: back; }
+    .face.bottom { grid-area: bottom; }
+    
+    .sticker {
+      border-radius: 2px; border: 1px solid rgba(0,0,0,0.3);
+    }
+    .sticker.W { background: #fff; }
+    .sticker.R { background: #ff4444; }
+    .sticker.G { background: #22c55e; }
+    .sticker.B { background: #3b82f6; }
+    .sticker.O { background: #ff8800; }
+    .sticker.Y { background: #eab308; }
+
+    .timer {
+      user-select: none; text-align: center; border-radius: 24px; padding: 28px 20px; background: var(--card);
+      border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+    }
+    .time {
+      font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 1px;
+      font-size: clamp(64px, 13vw, 140px);
+      line-height: 1; margin: 10px 0 8px; transition: color .15s ease;
+    }
+    .time.ready { color: var(--good); }
+    .time.inspect { color: var(--warn); }
+    .time.beep { filter: drop-shadow(0 0 10px rgba(255,255,255,.35)); }
+
+    .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+    button {
+      background: linear-gradient(180deg, #f7fafc, #edf2f7);
+      color: var(--fg); border: 1px solid #cbd5e0; padding: 10px 14px; border-radius: 14px; font-weight: 600; cursor: pointer;
+      transition: transform .05s ease, filter .15s ease, background .2s ease; font-size: 14px;
+    }
+    button:hover { filter: brightness(0.95); }
+    button:active { transform: translateY(1px); }
+    .toggle { background: #e2e8f0; }
+
+    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
+    @media (max-width: 880px){ .grid { grid-template-columns: 1fr; } }
+
+    .panel { 
+      background: var(--card); border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; 
+      transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+    .stat { 
+      background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 12px; padding: 10px; 
+      transition: background 0.5s ease, border-color 0.5s ease;
+    }
+    .stat .label { color: var(--muted); font-size: 12px; transition: color 0.5s ease; }
+    .stat .value { 
+      font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 700; margin-top: 6px; 
+      transition: color 0.5s ease;
+    }
+
+    .session h3 { margin: 0 0 8px; font-size: 16px; color: var(--muted); }
+    .times { max-height: 320px; overflow: auto; border-top: 1px dashed #26314d; margin-top: 8px; padding-top: 8px; }
+    .time-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed #1d2744; font-variant-numeric: tabular-nums; }
+    .time-row:last-child { border-bottom: none; }
+    .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #2b3753; color: var(--muted); }
+
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 8px; padding: 2px 6px; font-size: 12px; color: var(--muted); }
+    
+    .pattern-difficulty {
+      display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+    }
+    .difficulty-btn {
+      padding: 4px 12px; border-radius: 12px; background: #edf2f7; color: var(--fg);
+      border: 1px solid #cbd5e0; cursor: pointer; font-size: 12px; transition: all 0.2s;
+    }
+    .difficulty-btn.active {
+      background: var(--accent); color: #ffffff; border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <span class="badge">スペース長押し → 離してスタート / もう一度でストップ</span>
+      <span class="badge">ショートカット: <span class="kbd">N</span> 新規生成, <span class="kbd">T</span> 検討15s, <span class="kbd">D</span> 直前を削除, <span class="kbd">R</span> クリア</span>
+    </div>
+
+    <div class="mode-selector">
+      <button class="mode-btn active" data-mode="normal">通常モード</button>
+      <button class="mode-btn" data-mode="pattern">パターンモード</button>
+    </div>
+
+    <div class="scramble" id="scramble">-</div>
+
+    <div class="pattern-section" id="patternSection">
+      <div class="pattern-header">
+        <div class="pattern-title">目標パターン</div>
+        <div class="pattern-info">このパターンに合わせてください</div>
+      </div>
+      <div class="pattern-difficulty">
+        <button class="difficulty-btn active" data-difficulty="easy">簡単 (2-3色)</button>
+        <button class="difficulty-btn" data-difficulty="medium">普通 (4-5色)</button>
+        <button class="difficulty-btn" data-difficulty="hard">難しい (全色)</button>
+      </div>
+      <div class="cube-net" id="cubeNet"></div>
+    </div>
+
+    <div class="timer">
+      <div id="bigTime" class="time">0.000</div>
+      <div class="controls">
+        <button id="btnNew">新規生成</button>
+        <button id="btnToggleInsp" class="toggle">検討15秒: <span id="inspState">OFF</span></button>
+        <button id="btnDelete">直前を削除</button>
+        <button id="btnClear">セッションをクリア</button>
+        <button id="btnExport">CSVエクスポート</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel session">
+        <h3>セッション (<span id="currentMode">通常</span>)</h3>
+        <div class="stats">
+          <div class="stat"><div class="label">計測回数</div><div class="value" id="statCount">0</div></div>
+          <div class="stat"><div class="label">ベスト</div><div class="value" id="statBest">-</div></div>
+          <div class="stat"><div class="label">平均 (全体)</div><div class="value" id="statAvg">-</div></div>
+          <div class="stat"><div class="label">Ao5 / Ao12</div><div class="value" id="statAos">- / -</div></div>
+        </div>
+        <div class="times" id="times"></div>
+      </div>
+      <div class="panel">
+        <h3>使い方</h3>
+        <p><strong>通常モード:</strong> 従来のスピードキューブタイマー。全面を揃えるタイムを測定。</p>
+        <p><strong>パターンモード:</strong> ランダム生成されたパターンに合わせるタイムを測定。展開図を参考にパターンを再現してください。</p>
+        <p>スペースキーを<strong>500ms以上長押し</strong>すると準備（緑表示）。離すとスタート。もう一度スペースでストップ。</p>
+        <p>検討ONの場合は15秒のカウントダウン後に自動スタートします。</p>
+        <p>ショートカット: <span class="kbd">N</span> 新規生成, <span class="kbd">T</span> 検討切替, <span class="kbd">D</span> 直前削除, <span class="kbd">R</span> セッションクリア</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---- Utilities ----
+    const fmt = (ms) => {
+      if (!isFinite(ms)) return '-';
+      const s = ms / 1000;
+      return s.toFixed(3);
+    };
+
+    const downloadFile = (filename, text) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+    };
+
+    // Simple beep generator
+    const beeper = (() => {
+      let ctx;
+      const ensure = () => (ctx ||= new (window.AudioContext || window.webkitAudioContext)());
+      const beep = (freq=880, dur=120) => {
+        try {
+          const ac = ensure();
+          const o = ac.createOscillator();
+          const g = ac.createGain();
+          o.connect(g); g.connect(ac.destination);
+          o.frequency.value = freq; o.type = 'sine';
+          const t = ac.currentTime;
+          g.gain.setValueAtTime(0.001, t);
+          g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur/1000);
+          o.start(t); o.stop(t + dur/1000 + 0.02);
+        } catch {}
+      };
+      return { beep };
+    })();
+
+    // ---- Scrambler (3x3) ----
+    const faces = ['U','R','F','D','L','B'];
+    const mods = ['', "'", '2'];
+    const axisOf = { U:'y', D:'y', L:'x', R:'x', F:'z', B:'z' };
+    function genScramble(n=25){
+      let res = [], prevAxis = null, prevFace = null;
+      while (res.length < n){
+        const f = faces[Math.floor(Math.random()*faces.length)];
+        if (axisOf[f] === prevAxis) continue;
+        if (f === prevFace) continue;
+        const m = mods[Math.floor(Math.random()*mods.length)];
+        res.push(f + m);
+        prevAxis = axisOf[f];
+        prevFace = f;
+      }
+      return res.join(' ');
+    }
+
+    // ---- Pattern Generator ----
+    const colors = ['W', 'R', 'G', 'B', 'O', 'Y']; // White, Red, Green, Blue, Orange, Yellow
+
+    // Initial solved state - White on top for pattern mode
+    function getSolvedCube() {
+      return {
+        top: ['W','W','W','W','W','W','W','W','W'],        // White on top
+        left: ['O','O','O','O','O','O','O','O','O'],       // Orange on left  
+        front: ['G','G','G','G','G','G','G','G','G'],      // Green on front
+        right: ['R','R','R','R','R','R','R','R','R'],      // Red on right
+        back: ['B','B','B','B','B','B','B','B','B'],       // Blue on back
+        bottom: ['Y','Y','Y','Y','Y','Y','Y','Y','Y']      // Yellow on bottom
+      };
+    }
+
+    // Apply a single move to cube state
+    function applyMove(cube, move) {
+      const result = JSON.parse(JSON.stringify(cube)); // deep copy
+      
+      const face = move[0];
+      const modifier = move.slice(1);
+      
+      // Helper to rotate face clockwise
+      const rotateFaceClockwise = (faceArray) => {
+        const temp = [...faceArray];
+        return [temp[6], temp[3], temp[0], temp[7], temp[4], temp[1], temp[8], temp[5], temp[2]];
+      };
+      
+      // Helper to rotate face counter-clockwise
+      const rotateFaceCounterClockwise = (faceArray) => {
+        const temp = [...faceArray];
+        return [temp[2], temp[5], temp[8], temp[1], temp[4], temp[7], temp[0], temp[3], temp[6]];
+      };
+
+      let rotations = 1;
+      if (modifier === "'") rotations = 3; // counter-clockwise = 3 clockwise
+      if (modifier === '2') rotations = 2;
+
+      for (let i = 0; i < rotations; i++) {
+        if (face === 'U') {
+          result.top = rotateFaceClockwise(result.top);
+          // Rotate adjacent edges
+          const temp = [result.front[0], result.front[1], result.front[2]];
+          result.front[0] = result.right[0]; result.front[1] = result.right[1]; result.front[2] = result.right[2];
+          result.right[0] = result.back[0]; result.right[1] = result.back[1]; result.right[2] = result.back[2];
+          result.back[0] = result.left[0]; result.back[1] = result.left[1]; result.back[2] = result.left[2];
+          result.left[0] = temp[0]; result.left[1] = temp[1]; result.left[2] = temp[2];
+        }
+        else if (face === 'D') {
+          result.bottom = rotateFaceClockwise(result.bottom);
+          const temp = [result.front[6], result.front[7], result.front[8]];
+          result.front[6] = result.left[6]; result.front[7] = result.left[7]; result.front[8] = result.left[8];
+          result.left[6] = result.back[6]; result.left[7] = result.back[7]; result.left[8] = result.back[8];
+          result.back[6] = result.right[6]; result.back[7] = result.right[7]; result.back[8] = result.right[8];
+          result.right[6] = temp[0]; result.right[7] = temp[1]; result.right[8] = temp[2];
+        }
+        else if (face === 'R') {
+          result.right = rotateFaceClockwise(result.right);
+          const temp = [result.top[2], result.top[5], result.top[8]];
+          result.top[2] = result.front[2]; result.top[5] = result.front[5]; result.top[8] = result.front[8];
+          result.front[2] = result.bottom[2]; result.front[5] = result.bottom[5]; result.front[8] = result.bottom[8];
+          result.bottom[2] = result.back[6]; result.bottom[5] = result.back[3]; result.bottom[8] = result.back[0];
+          result.back[6] = temp[0]; result.back[3] = temp[1]; result.back[0] = temp[2];
+        }
+        else if (face === 'L') {
+          result.left = rotateFaceClockwise(result.left);
+          const temp = [result.top[0], result.top[3], result.top[6]];
+          result.top[0] = result.back[8]; result.top[3] = result.back[5]; result.top[6] = result.back[2];
+          result.back[8] = result.bottom[0]; result.back[5] = result.bottom[3]; result.back[2] = result.bottom[6];
+          result.bottom[0] = result.front[0]; result.bottom[3] = result.front[3]; result.bottom[6] = result.front[6];
+          result.front[0] = temp[0]; result.front[3] = temp[1]; result.front[6] = temp[2];
+        }
+        else if (face === 'F') {
+          result.front = rotateFaceClockwise(result.front);
+          const temp = [result.top[6], result.top[7], result.top[8]];
+          result.top[6] = result.left[8]; result.top[7] = result.left[5]; result.top[8] = result.left[2];
+          result.left[8] = result.bottom[2]; result.left[5] = result.bottom[1]; result.left[2] = result.bottom[0];
+          result.bottom[2] = result.right[0]; result.bottom[1] = result.right[3]; result.bottom[0] = result.right[6];
+          result.right[0] = temp[0]; result.right[3] = temp[1]; result.right[6] = temp[2];
+        }
+        else if (face === 'B') {
+          result.back = rotateFaceClockwise(result.back);
+          const temp = [result.top[0], result.top[1], result.top[2]];
+          result.top[0] = result.right[2]; result.top[1] = result.right[5]; result.top[2] = result.right[8];
+          result.right[2] = result.bottom[8]; result.right[5] = result.bottom[7]; result.right[8] = result.bottom[6];
+          result.bottom[8] = result.left[6]; result.bottom[7] = result.left[3]; result.bottom[6] = result.left[0];
+          result.left[6] = temp[0]; result.left[3] = temp[1]; result.left[0] = temp[2];
+        }
+      }
+      
+      return result;
+    }
+
+    // Apply scramble sequence to cube
+    function applyScramble(cube, scrambleStr) {
+      const moves = scrambleStr.split(' ').filter(m => m.trim());
+      let result = cube;
+      for (const move of moves) {
+        result = applyMove(result, move.trim());
+      }
+      return result;
+    }
+
+    function generateRandomPattern(difficulty = 'medium') {
+      let scrambleLength;
+      switch(difficulty) {
+        case 'easy': scrambleLength = 8 + Math.floor(Math.random() * 5); break; // 8-12 moves
+        case 'medium': scrambleLength = 15 + Math.floor(Math.random() * 8); break; // 15-22 moves  
+        case 'hard': scrambleLength = 20 + Math.floor(Math.random() * 15); break; // 20-34 moves
+        default: scrambleLength = 15 + Math.floor(Math.random() * 8); break;
+      }
+      
+      const scrambleForPattern = genScramble(scrambleLength);
+      const solvedCube = getSolvedCube();
+      const scrambledCube = applyScramble(solvedCube, scrambleForPattern);
+      
+      return {
+        pattern: scrambledCube,
+        generatingScramble: scrambleForPattern
+      };
+    }
+
+    function renderCubeNet(pattern) {
+      const cubeNet = document.getElementById('cubeNet');
+      cubeNet.innerHTML = '';
+      
+      const faceOrder = ['top', 'left', 'front', 'right', 'back', 'bottom'];
+      
+      faceOrder.forEach(faceName => {
+        const faceDiv = document.createElement('div');
+        faceDiv.className = `face ${faceName}`;
+        
+        pattern[faceName].forEach(color => {
+          const sticker = document.createElement('div');
+          sticker.className = `sticker ${color}`;
+          faceDiv.appendChild(sticker);
+        });
+        
+        cubeNet.appendChild(faceDiv);
+      });
+    }
+
+    // ---- State ----
+    const el = (id) => document.getElementById(id);
+    const big = el('bigTime');
+    const timesEl = el('times');
+    const scrambleEl = el('scramble');
+    const inspStateEl = el('inspState');
+    const patternSection = el('patternSection');
+    const currentModeEl = el('currentMode');
+
+    let currentMode = 'normal'; // 'normal' or 'pattern'
+    let currentDifficulty = 'easy';
+    let currentPattern = null;
+    let session = JSON.parse(localStorage.getItem(`cube.session.${currentMode}`) || '[]');
+    let inspectOn = JSON.parse(localStorage.getItem('cube.inspectOn') || 'false');
+
+    let state = 'idle'; // idle | hold | ready | inspect | running
+    let t0 = 0, raf = 0, holdTimer = 0, inspectEnd = 0, currentScramble = '';
+
+    // ---- Mode Management ----
+    function setMode(mode) {
+      // Save current session
+      localStorage.setItem(`cube.session.${currentMode}`, JSON.stringify(session));
+      
+      currentMode = mode;
+      session = JSON.parse(localStorage.getItem(`cube.session.${currentMode}`) || '[]');
+      
+      // Update UI
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+      
+      patternSection.classList.toggle('active', mode === 'pattern');
+      currentModeEl.textContent = mode === 'pattern' ? 'パターン' : '通常';
+      
+      renderTimes();
+      generateNew();
+    }
+
+    function setDifficulty(difficulty) {
+      currentDifficulty = difficulty;
+      document.querySelectorAll('.difficulty-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.difficulty === difficulty);
+      });
+      
+      if (currentMode === 'pattern') {
+        generateNew();
+      }
+    }
+
+    // ---- Rendering ----
+    function renderTimes(){
+      timesEl.innerHTML = '';
+      session.slice().reverse().forEach((it, idx) => {
+        const div = document.createElement('div');
+        div.className = 'time-row';
+        const n = session.length - idx;
+        const challengeText = it.challenge || it.scramble;
+        div.innerHTML = `<span>#${n}</span><span>${fmt(it.ms)} s</span><span class="pill">${challengeText}</span>`;
+        timesEl.appendChild(div);
+      });
+      el('statCount').textContent = String(session.length);
+      el('statBest').textContent = session.length ? fmt(Math.min(...session.map(t=>t.ms))) + ' s' : '-';
+      el('statAvg').textContent = session.length ? fmt(session.reduce((a,b)=>a+b.ms,0)/session.length) + ' s' : '-';
+      const a5 = averageOf(5); const a12 = averageOf(12);
+      el('statAos').textContent = `${a5 ? fmt(a5)+ ' s' : '-'} / ${a12 ? fmt(a12) + ' s' : '-'}`;
+    }
+
+    function averageOf(n){
+      if (session.length < n) return null;
+      const lastN = session.slice(-n).map(t=>t.ms).slice();
+      lastN.sort((a,b)=>a-b);
+      const trimmed = lastN.slice(1, -1);
+      const avg = trimmed.reduce((a,b)=>a+b,0) / trimmed.length;
+      return avg;
+    }
+
+    function setInspect(on){
+      inspectOn = !!on; localStorage.setItem('cube.inspectOn', JSON.stringify(inspectOn));
+      inspStateEl.textContent = inspectOn ? 'ON' : 'OFF';
+    }
+
+    function generateNew(){
+      if (currentMode === 'normal') {
+        currentScramble = genScramble();
+        scrambleEl.textContent = currentScramble;
+      } else if (currentMode === 'pattern') {
+        const patternData = generateRandomPattern(currentDifficulty);
+        currentPattern = patternData.pattern;
+        renderCubeNet(currentPattern);
+        currentScramble = genScramble(); // New scramble for starting position
+        
+        // Show both the pattern-generating scramble and the starting scramble
+        scrambleEl.innerHTML = `
+          <div style="margin-bottom: 8px;">
+            <strong>スタート用スクランブル:</strong> ${currentScramble}
+          </div>
+          <div style="font-size: 0.9em; color: var(--muted);">
+            <strong>パターン生成:</strong> ${patternData.generatingScramble}
+          </div>
+        `;
+      }
+    }
+
+    function tick(){
+      if (state === 'running'){
+        const ms = performance.now() - t0;
+        big.textContent = fmt(ms);
+        raf = requestAnimationFrame(tick);
+      } else if (state === 'inspect'){
+        const remain = Math.max(0, inspectEnd - performance.now());
+        big.textContent = (remain/1000).toFixed(1);
+        if (Math.abs(remain - 7000) < 20 || Math.abs(remain - 3000) < 20) { beeper.beep(880, 90); big.classList.add('beep'); setTimeout(()=>big.classList.remove('beep'), 120); }
+        if (remain <= 0){ startRun(); }
+        raf = requestAnimationFrame(tick);
+      }
+    }
+
+    function startRun(){
+      state = 'running';
+      big.classList.remove('inspect');
+      t0 = performance.now();
+      beeper.beep(660, 90);
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+    }
+
+    function stopRun(){
+      if (state !== 'running') return;
+      state = 'idle';
+      cancelAnimationFrame(raf);
+      const ms = performance.now() - t0;
+      big.textContent = fmt(ms);
+      
+      const record = { ms, at: Date.now() };
+      if (currentMode === 'normal') {
+        record.scramble = currentScramble;
+        record.challenge = currentScramble;
+      } else {
+        record.scramble = currentScramble;
+        record.pattern = currentPattern;
+        record.difficulty = currentDifficulty;
+        record.challenge = `パターン(${currentDifficulty})`;
+      }
+      
+      session.push(record);
+      localStorage.setItem(`cube.session.${currentMode}`, JSON.stringify(session));
+      renderTimes();
+      beeper.beep(520, 90);
+      generateNew();
+    }
+
+    function enterHold(){
+      if (state !== 'idle') return;
+      state = 'hold';
+      big.classList.remove('inspect');
+      big.classList.remove('ready');
+      holdTimer = setTimeout(()=>{ if (state==='hold'){ state='ready'; big.classList.add('ready'); } }, 500);
+    }
+
+    function releaseFromHold(){
+      clearTimeout(holdTimer);
+      if (state === 'ready'){
+        big.classList.remove('ready');
+        if (inspectOn){
+          state = 'inspect';
+          big.classList.add('inspect');
+          inspectEnd = performance.now() + 15000;
+          beeper.beep(1000, 80);
+          cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+        } else {
+          startRun();
+        }
+      } else if (state === 'hold'){
+        state = 'idle';
+      }
+    }
+
+    // ---- Events ----
+    document.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.code === 'Space'){
+        e.preventDefault();
+        if (state === 'running') { stopRun(); return; }
+        if (state === 'inspect') { startRun(); return; }
+        enterHold();
+      } else if (e.key === 'n' || e.key === 'N'){ generateNew(); }
+      else if (e.key === 't' || e.key === 'T'){ setInspect(!inspectOn); }
+      else if (e.key === 'd' || e.key === 'D'){ deleteLast(); }
+      else if (e.key === 'r' || e.key === 'R'){ clearSession(); }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space'){
+        e.preventDefault();
+        if (state === 'hold' || state === 'ready') releaseFromHold();
+      }
+    });
+
+    // Mode switching
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    });
+
+    // Difficulty switching
+    document.querySelectorAll('.difficulty-btn').forEach(btn => {
+      btn.addEventListener('click', () => setDifficulty(btn.dataset.difficulty));
+    });
+
+    function deleteLast(){
+      if (!session.length) return;
+      session.pop();
+      localStorage.setItem(`cube.session.${currentMode}`, JSON.stringify(session));
+      renderTimes();
+    }
+    
+    function clearSession(){
+      if (!confirm('セッションをすべて削除しますか？')) return;
+      session = [];
+      localStorage.setItem(`cube.session.${currentMode}`, JSON.stringify(session));
+      renderTimes();
+    }
+
+    // Buttons
+    el('btnNew').onclick = generateNew;
+    el('btnToggleInsp').onclick = () => setInspect(!inspectOn);
+    el('btnDelete').onclick = deleteLast;
+    el('btnClear').onclick = clearSession;
+    el('btnExport').onclick = () => {
+      const headers = ['index','time_ms','time_s','mode','challenge','scramble','difficulty','timestamp'];
+      const rows = [headers].concat(session.map((t,i) => [
+        i+1, 
+        t.ms, 
+        (t.ms/1000).toFixed(3), 
+        currentMode,
+        `"${t.challenge || t.scramble}"`,
+        `"${t.scramble}"`,
+        t.difficulty || '',
+        new Date(t.at).toISOString()
+      ]));
+      const csv = rows.map(r=>r.join(',')).join('\n');
+      downloadFile(`cube_session_${currentMode}.csv`, csv);
+    };
+
+    // Init
+    function init(){
+      setInspect(inspectOn);
+      setMode(currentMode);
+    }
+    init();
+  </script>
+</body>
+</html>
